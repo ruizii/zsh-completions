@@ -1,0 +1,42 @@
+#compdef gau
+
+local -a status_codes mime_types extensions
+status_codes=(
+    '200[OK]' '204[No Content]' '301[Moved Permanently]' '302[Found]' '304[Not Modified]'
+    '307[Temporary Redirect]' '308[Permanent Redirect]' '400[Bad Request]' '401[Unauthorized]'
+    '403[Forbidden]' '404[Not Found]' '405[Method Not Allowed]' '429[Too Many Requests]'
+    '500[Internal Server Error]' '502[Bad Gateway]' '503[Service Unavailable]' '504[Gateway Timeout]'
+)
+mime_types=(
+    text/html text/plain text/css text/javascript text/xml text/csv
+    application/javascript application/json application/xml application/pdf
+    application/octet-stream application/x-www-form-urlencoded application/zip
+    image/png image/jpeg image/gif image/svg+xml image/x-icon image/webp
+    font/woff font/woff2 font/ttf video/mp4 audio/mpeg warc/revisit
+)
+extensions=(
+    png jpg jpeg gif svg ico webp bmp tif tiff css woff woff2 ttf eot otf
+    mp3 mp4 avi mov webm pdf zip js
+)
+
+_arguments -s \
+    '--blacklist=[List of extensions to skip]:extensions:_values -s , extension $extensions' \
+    '--config=[Location of config file (default: $HOME/.gau.toml)]:select file:_files -g "*.toml(-.)"' \
+    '--fc=[List of status codes to filter]:status codes:_values -s , "status code" $status_codes' \
+    '--fp[Remove different parameters of the same endpoint]' \
+    '--from=[Fetch urls from date (format: YYYYMM)]:enter date (YYYYMM):()' \
+    '--ft=[List of mime-types to filter]:mime-types:_values -s , mime-type $mime_types' \
+    '--json[Output as json]' \
+    '--mc=[List of status codes to match]:status codes:_values -s , "status code" $status_codes' \
+    '--mt=[List of mime-types to match]:mime-types:_values -s , mime-type $mime_types' \
+    '--o=[Filename to write results to]:select file:_files -X "Select output file or enter filename manually"' \
+    '--providers=[List of providers to use]:providers:_values -s , provider wayback commoncrawl otx urlscan' \
+    '--proxy=[HTTP proxy to use]:enter proxy URL:_urls' \
+    '--retries=[Retries for HTTP client]:enter retries:()' \
+    '--subs[Include subdomains of target domain]' \
+    '--threads=[Number of workers to spawn (default: 1)]:enter threads:()' \
+    '--timeout=[Timeout (in seconds) for HTTP client (default: 45)]:enter seconds:()' \
+    '--to=[Fetch urls to date (format: YYYYMM)]:enter date (YYYYMM):()' \
+    '--verbose[Show verbose output]' \
+    '(- *)--version[Show gau version]' \
+    '*:domain:_hosts'

@@ -1,0 +1,167 @@
+#compdef kr
+
+_kr_assetnote_wordlists() {
+    local -a lists
+    lists=(${(f)"$(_call_program wordlists kr wordlist list -q -o text 2>/dev/null | awk -F '\t' '{ printf "%s:%s (%s lines, %s%s)\n", $1, $2, $4, $5, ($6 == "true" ? ", cached" : "") }')"})
+    _describe -t wordlists 'assetnote wordlist' lists
+}
+
+_kr_input() {
+    _alternative \
+        'files:hosts file:_files' \
+        'hosts:host:_hosts' \
+        'stdin:stdin:(-)'
+}
+
+local -a global_opts scan_opts
+global_opts=(
+    '--config=[Config file (default: $HOME/.kiterunner.yaml)]:select file:_files -g "*.(yaml|yml)(-.)"'
+    '(-o --output)'{-o+,--output=}'[Output format (default: pretty)]:select format:(json text pretty)'
+    '(-q --quiet)'{-q,--quiet}'[Quiet mode, mute unnecessary pretty text]'
+    '(-v --verbose)'{-v+,--verbose=}'[Level of logging verbosity (default: info)]:select level:(error info debug trace)'
+    '(- : *)'{-h,--help}'[Show help]'
+)
+# Shared between scan and brute
+scan_opts=(
+    '*'{-A+,--assetnote-wordlist=}'[Use wordlists from wordlist.assetnote.io, optionally limited with ;N (e.g. apiroutes-210228;20000)]:wordlist:_kr_assetnote_wordlists'
+    '*--blacklist-domain=[Domains that are blacklisted for redirects]:enter domain:_hosts'
+    '--delay=[Delay to place inbetween requests to a single host]:enter duration (e.g. 100ms):()'
+    '--disable-precheck[Skip host discovery]'
+    '*--fail-status-codes=[Status codes to blacklist as fail, overrides success-status-codes]:enter status codes:()'
+    '*--filter-api=[Only scan apis matching this ksuid]:enter ksuid:()'
+    '--force-method=[Ignore the methods specified in the ogl file and force this method]:select method:(GET POST PUT PATCH DELETE HEAD OPTIONS)'
+    '*'{-H+,--header=}'[Headers to add to requests (default: x-forwarded-for: 127.0.0.1)]:enter header:()'
+    '*--ignore-length=[Range of content length bytes to ignore (e.g. 100-105 or 1234 or 123,34-53)]:enter length range:()'
+    '(-x --max-connection-per-host)'{-x+,--max-connection-per-host=}'[Max connections to a single host (default: 3)]:enter connections:()'
+    '(-j --max-parallel-hosts)'{-j+,--max-parallel-hosts=}'[Max number of concurrent hosts to scan at once (default: 50)]:enter hosts:()'
+    '--max-redirects=[Maximum number of redirects to follow (default: 3)]:enter redirects:()'
+    '(-d --preflight-depth)'{-d+,--preflight-depth=}'[Directory depth to check during preflight, 0 checks only the docroot]:enter depth:()'
+    '--profile-name=[Name for profile output file]:enter name:()'
+    '--progress=[Show a progress bar while scanning (default: true)]:select:(true false)'
+    '--quarantine-threshold=[Quarantine the host as wildcard after N consecutive hits, 0 disables (default: 10)]:enter threshold:()'
+    '*--success-status-codes=[Status codes to whitelist as success]:enter status codes:()'
+    '(-t --timeout)'{-t+,--timeout=}'[Timeout to use on all requests (default: 3s)]:enter duration:()'
+    '--user-agent=[User agent to use for requests]:enter User-Agent:()'
+    '--wildcard-detection=[Wildcard redirect detection (default: true)]:select:(true false)'
+)
+
+local curcontext="$curcontext" state line
+typeset -A opt_args
+
+_arguments -C \
+    $global_opts \
+    '1: :->command' \
+    '*:: :->args'
+
+case $state in
+    command)
+        local -a commands
+        commands=(
+            'brute:Brute one or multiple hosts with a provided wordlist'
+            'help:Help about any command'
+            'kb:Manipulate the kitebuilder schema'
+            'scan:Scan one or multiple hosts with a provided wordlist'
+            'version:Version of the binary you are running'
+            'wordlist:Look at your cached wordlists and remote wordlists'
+        )
+        _describe -t commands 'kr command' commands
+        ;;
+    args)
+        curcontext="${curcontext%:*}-$line[1]:"
+        case $line[1] in
+            brute)
+                _arguments -s \
+                    $global_opts $scan_opts \
+                    '(-D --dirsearch-compat)'{-D,--dirsearch-compat}'[Replace %EXT% with the extensions provided]' \
+                    '*'{-e+,--extensions=}'[Extensions to append while scanning]:extensions:_values -s , extension php asp aspx asmx ashx jsp do action html js json txt xml bak' \
+                    '*'{-w+,--wordlist=}'[Normal wordlist to use for scanning]:select file:_files' \
+                    '1:input:_kr_input'
+                ;;
+            scan)
+                _arguments -s \
+                    $global_opts $scan_opts \
+                    '--kitebuilder-full-scan[Perform a full scan without first performing a phase scan]' \
+                    '*'{-w+,--kitebuilder-list=}'[OGL wordlist to use for scanning]:select file:_files -g "*.(kite|json|txt)(-.)"' \
+                    '1:input:_kr_input'
+                ;;
+            kb)
+                _arguments -C \
+                    $global_opts \
+                    '1: :->kb_command' \
+                    '*:: :->kb_args'
+                case $state in
+                    kb_command)
+                        local -a kb_commands
+                        kb_commands=(
+                            'compile:Compile a kitebuilder schema and write the data to the specified file'
+                            'convert:Convert an input file format into the specified output file format'
+                            'parse:Parse a kitebuilder schema and print out the prettified data'
+                            'replay:Replay a kitebuilder request based on the input'
+                        )
+                        _describe -t commands 'kb command' kb_commands
+                        ;;
+                    kb_args)
+                        case $line[1] in
+                            compile|convert)
+                                _arguments -s \
+                                    $global_opts \
+                                    '(-d --debug)'{-d,--debug}'[Debug the parsing]' \
+                                    '1:input file:_files -g "*.(kite|json|txt)(-.)"' \
+                                    '2:output file:_files -g "*.(kite|json|txt)(-.)"'
+                                ;;
+                            parse)
+                                _arguments -s \
+                                    $global_opts \
+                                    '(-d --debug)'{-d,--debug}'[Debug the parsing]' \
+                                    '1:schema file:_files -g "*.(kite|json)(-.)"'
+                                ;;
+                            replay)
+                                _arguments -s \
+                                    $global_opts \
+                                    '(-w --kitebuilder-list)'{-w+,--kitebuilder-list=}'[OGL wordlist to use for scanning]:select file:_files -g "*.(kite|json)(-.)"' \
+                                    '(-p --proxy)'{-p+,--proxy=}'[Proxy to replay the request through]:enter proxy URL:_urls' \
+                                    '*:request (full output line or <id> <method> <route> <host>):()'
+                                ;;
+                        esac
+                        ;;
+                esac
+                ;;
+            wordlist)
+                _arguments -C \
+                    $global_opts \
+                    '1: :->wordlist_command' \
+                    '*:: :->wordlist_args'
+                case $state in
+                    wordlist_command)
+                        local -a wordlist_commands
+                        wordlist_commands=(
+                            'list:List the wordlists cached and available'
+                            'save:Save the wordlists specified (full filename or alias)'
+                        )
+                        _describe -t commands 'wordlist command' wordlist_commands
+                        ;;
+                    wordlist_args)
+                        case $line[1] in
+                            list)
+                                _arguments -s $global_opts
+                                ;;
+                            save)
+                                _arguments -s \
+                                    $global_opts \
+                                    '--no-cache[Delete the local files matching the names and pull fresh files]' \
+                                    '*:wordlist:_kr_assetnote_wordlists'
+                                ;;
+                        esac
+                        ;;
+                esac
+                ;;
+            help)
+                _arguments \
+                    '1:command:(brute kb scan version wordlist)'
+                ;;
+            version)
+                _arguments -s $global_opts
+                ;;
+        esac
+        ;;
+esac

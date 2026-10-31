@@ -1,0 +1,24 @@
+#compdef binwalk3
+
+_binwalk3_signatures() {
+    local -a sigs
+    sigs=(${(f)"$(_call_program signatures $words[1] --list 2>/dev/null | awk -F '  +' 'NR > 3 && NF >= 3 { gsub(/:/, "\\:", $1); print $2 ":" $1 " (extractor: " $3 ")" }')"})
+    _describe -t signatures 'signature' sigs "$@"
+}
+
+_arguments -s \
+    '(- : *)'{-L,--list}'[List supported signatures and extractors]' \
+    '(-q --quiet)'{-q,--quiet}'[Supress output to stdout]' \
+    '(-v --verbose)'{-v,--verbose}'[During recursive extraction display *all* results]' \
+    '(-e --extract -E --entropy)'{-e,--extract}'[Automatically extract known file types]' \
+    '(-M --matryoshka -E --entropy)'{-M,--matryoshka}'[Recursively scan extracted files]' \
+    '(-a --search-all)'{-a,--search-all}'[Search for all signatures at all offsets]' \
+    '(-E --entropy -e --extract -M --matryoshka)'{-E,--entropy}'[Plot the entropy of the specified file]' \
+    '(-l --log)'{-l+,--log=}'[Log JSON results to a file]:select file:_files -X "Select output file or enter filename manually"' \
+    '(-t --threads)'{-t+,--threads=}'[Manually specify the number of threads to use]:enter threads:()' \
+    '(-y --include)*'{-x+,--exclude=}'[Do no scan for these signatures]:signatures:_sequence _binwalk3_signatures' \
+    '(-x --exclude)*'{-y+,--include=}'[Only scan for these signatures]:signatures:_sequence _binwalk3_signatures' \
+    '(-C --directory)'{-C+,--directory=}'[Extract files/folders to a custom directory (default: extractions)]:select dir:_files -/' \
+    '(- : *)'{-h,--help}'[Print help]' \
+    '(- : *)'{-V,--version}'[Print version]' \
+    '1:file to analyze:_files'

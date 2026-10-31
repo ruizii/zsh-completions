@@ -1,0 +1,65 @@
+#compdef searchsploit
+
+_searchsploit_edb_ids() {
+    local rc dir csv
+    local -a dirs ids
+
+    for rc in ~/.searchsploit_rc /etc/searchsploit_rc; do
+        [[ -r $rc ]] || continue
+        dirs=(${(f)"$(sed -n 's/^path_array+=("\(.*\)")$/\1/p' $rc)"})
+        break
+    done
+    (( $#dirs )) || dirs=(/usr/share/exploitdb)
+
+    # Only filter on numeric prefixes, anything else is left to zsh matching
+    local filter='^[0-9]+,'
+    [[ $PREFIX == <-> ]] && filter="^${PREFIX}[0-9]*,"
+
+    for dir in ${(u)dirs}; do
+        for csv in $dir/files_*.csv(N); do
+            ids+=(${(f)"$(grep -E "$filter" $csv | sed -E 's/:/\\:/g; s/^([0-9]+),[^,]*,("(([^"]|"")*)"|([^,]*)),.*/\1:\3\5/; s/""/"/g')"})
+        done
+    done
+
+    # files_exploits.csv contains duplicate rows
+    ids=(${(u)ids})
+    _describe -t edb-ids 'EDB-ID' ids
+}
+
+local curcontext="$curcontext" state line
+typeset -A opt_args
+
+_arguments -s -C \
+    '(-c --case)'{-c,--case}'[Perform a case-sensitive search (default is insensitive)]' \
+    '(-e --exact)'{-e,--exact}'[Perform an EXACT & order match on exploit title (implies -t)]' \
+    '(-s --strict)'{-s,--strict}'[Perform a strict search, disabling fuzzy search for version range]' \
+    '(-t --title)'{-t,--title}'[Search JUST the exploit title (default is title AND the file path)]' \
+    '--exclude=[Remove values from results, chain multiple values with "|"]:pattern (term1|term2)' \
+    '--cve[Search for Common Vulnerabilities and Exposures (CVE) value]' \
+    '(-j --json)'{-j,--json}'[Show result in JSON format]' \
+    '(-o --overflow)'{-o,--overflow}'[Exploit titles are allowed to overflow their columns]' \
+    '(-p --path -m --mirror -x --examine -n --nmap)'{-p,--path}'[Show the full path to an exploit (and copy it to the clipboard if possible)]' \
+    '(-v --verbose)'{-v,--verbose}'[Display more information in output]' \
+    '(-w --www)'{-w,--www}'[Show URLs to Exploit-DB.com rather than the local path]' \
+    '--id[Display the EDB-ID value rather than local path]' \
+    '(--disable-colour --disable-color)'{--disable-colour,--disable-color}'[Disable colour highlighting in search results]' \
+    '(-p --path -m --mirror -x --examine -n --nmap)'{-m,--mirror}'[Mirror (aka copies) an exploit to the current working directory]' \
+    '(-p --path -m --mirror -x --examine -n --nmap)'{-x,--examine}'[Examine (aka opens) the exploit using $PAGER]' \
+    '(- *)'{-h,--help}'[Show help screen]' \
+    '(- *)'{-u,--update}'[Check for and install any exploitdb package updates (brew, deb & git)]' \
+    '(-p --path -m --mirror -x --examine -n --nmap)'{-n,--nmap}"[Check all results in Nmap's XML output with service version]" \
+    '*:: :->args'
+
+case $state in
+    args)
+        if (( ${+opt_args[-p]} || ${+opt_args[--path]} || ${+opt_args[-m]} || ${+opt_args[--mirror]} || ${+opt_args[-x]} || ${+opt_args[--examine]} )); then
+            _searchsploit_edb_ids
+        elif (( ${+opt_args[-n]} || ${+opt_args[--nmap]} )); then
+            _files -g '*.xml(-.)'
+        elif (( ${+opt_args[--cve]} )); then
+            _message 'CVE (e.g. 2021-44228)'
+        else
+            _message 'search term'
+        fi
+        ;;
+esac

@@ -1,0 +1,115 @@
+#compdef katana
+
+local -a fields output_fields
+fields=(url path fqdn rdn rurl qurl qpath file ufile key value kv dir udir)
+output_fields=(
+    attribute body contentlength customfields depth error extra forms headers
+    knowledgebase method raw reader request resp response roothostname
+    skipvalidation source statuscode storedresponsepath tag technologies
+    timestamp url xhrrequests
+)
+
+_arguments \
+    '*'{-u,-list}'[Target url / list to crawl]:target url or file:_alternative "files\:file\:_files" "urls\:url\:_urls"' \
+    '-resume[Resume scan using resume.cfg]:select file:_files -g "*.cfg(-.)"' \
+    '*'{-e,-exclude}"[Exclude host matching specified filter ('cdn', 'private-ips', cidr, ip, regex)]:filter:_values -s , filter cdn private-ips" \
+    '*'{-r,-resolvers}'[List of custom resolver (file or comma separated)]:resolvers file or list:_files' \
+    '(-d -depth)'{-d,-depth}'[Maximum depth to crawl (default: 3)]:enter depth:()' \
+    '(-jc -js-crawl)'{-jc,-js-crawl}'[Enable endpoint parsing / crawling in javascript file]' \
+    '(-jsl -jsluice)'{-jsl,-jsluice}'[Enable jsluice parsing in javascript file (memory intensive)]' \
+    '(-ct -crawl-duration)'{-ct,-crawl-duration}'[Maximum duration to crawl the target for (s, m, h, d)]:enter duration (e.g. 10m):()' \
+    '(-kf -known-files)'{-kf,-known-files}'[Enable crawling of known files (requires a minimum depth of 3)]:known files:_values -s , "known file" all robotstxt sitemapxml' \
+    '(-mrs -max-response-size)'{-mrs,-max-response-size}'[Maximum response size to read (default: 4194304)]:enter bytes:()' \
+    '-timeout[Time to wait for request in seconds (default: 10)]:enter seconds:()' \
+    '-time-stable[Time to wait until the page is stable in seconds (default: 1)]:enter seconds:()' \
+    '(-aff -automatic-form-fill)'{-aff,-automatic-form-fill}'[Enable automatic form filling (experimental)]' \
+    '(-fx -form-extraction)'{-fx,-form-extraction}'[Extract form, input, textarea & select elements in jsonl output]' \
+    '-retry[Number of times to retry the request (default: 1)]:enter retries:()' \
+    '-proxy[HTTP/socks5 proxy to use]:enter proxy URL:_urls' \
+    '(-td -tech-detect)'{-td,-tech-detect}'[Enable technology detection]' \
+    '*'{-H,-headers}'[Custom header/cookie to include in all http request in header:value format (file)]:header or file:_files' \
+    '-config[Path to the katana configuration file]:select file:_files -g "*.(yaml|yml)(-.)"' \
+    '(-fc -form-config)'{-fc,-form-config}'[Path to custom form configuration file]:select file:_files' \
+    '(-flc -field-config)'{-flc,-field-config}'[Path to custom field configuration file]:select file:_files' \
+    '(-s -strategy)'{-s,-strategy}'[Visit strategy (default: depth-first)]:select strategy:(depth-first breadth-first)' \
+    '(-iqp -ignore-query-params)'{-iqp,-ignore-query-params}'[Ignore crawling same path with different query-param values]' \
+    '(-fsu -filter-similar)'{-fsu,-filter-similar}'[Filter crawling of similar looking URLs (e.g. /users/123 and /users/456)]' \
+    '(-fst -filter-similar-threshold)'{-fst,-filter-similar-threshold}'[Number of distinct values before a path position is treated as parameter (default: 10)]:enter threshold:()' \
+    '(-tlsi -tls-impersonate)'{-tlsi,-tls-impersonate}'[Enable experimental client hello (ja3) tls randomization]' \
+    '(-dr -disable-redirects)'{-dr,-disable-redirects}'[Disable following redirects]' \
+    '(-pc -path-climb)'{-pc,-path-climb}'[Enable path climb (auto crawl parent paths)]' \
+    '(-kb -knowledge-base)'{-kb,-knowledge-base}'[Enable knowledge base classification]' \
+    '-kb-secrets[Enable secrets extractor in the knowledge base]' \
+    '-kb-validate-secrets[Validate detected secrets against their provider (sends live API calls)]' \
+    '-kb-endpoints[Enable endpoints extractor (classifies REST/GraphQL/SOAP/XHR requests)]' \
+    '(-mdp -max-domain-pages)'{-mdp,-max-domain-pages}'[Maximum number of pages to crawl per domain (default: unlimited)]:enter pages:()' \
+    '(- *)'{-health-check,-hc}'[Run diagnostic check up]' \
+    '(-elog -error-log)'{-elog,-error-log}'[File to write sent requests error log]:select file:_files -X "Select output file or enter filename manually"' \
+    '-pprof-server[Enable pprof server]' \
+    '(-hl -headless)'{-hl,-headless}'[Enable headless crawling (experimental)]' \
+    '(-hh -hybrid)'{-hh,-hybrid}'[Enable headless hybrid crawling (experimental)]' \
+    '(-sc -system-chrome)'{-sc,-system-chrome}'[Use local installed chrome browser instead of katana installed]' \
+    '(-sb -show-browser)'{-sb,-show-browser}'[Show the browser on the screen with headless mode]' \
+    '*'{-ho,-headless-options}'[Start headless chrome with additional options]:enter chrome options:()' \
+    '(-nos -no-sandbox)'{-nos,-no-sandbox}'[Start headless chrome in --no-sandbox mode]' \
+    '(-cdd -chrome-data-dir)'{-cdd,-chrome-data-dir}'[Path to store chrome browser data]:select dir:_files -/' \
+    '(-scp -system-chrome-path)'{-scp,-system-chrome-path}'[Use specified chrome browser for headless crawling]:select chrome binary:_files' \
+    '(-noi -no-incognito)'{-noi,-no-incognito}'[Start headless chrome without incognito mode]' \
+    '(-cwu -chrome-ws-url)'{-cwu,-chrome-ws-url}'[Use chrome browser instance launched elsewhere with the debugger listening at this URL]:enter websocket URL:_urls' \
+    '(-xhr -xhr-extraction)'{-xhr,-xhr-extraction}'[Extract xhr request url,method in jsonl output]' \
+    '(-mfc -max-failure-count)'{-mfc,-max-failure-count}'[Maximum number of consecutive action failures before stopping (default: 10)]:enter count:()' \
+    '(-ed -enable-diagnostics)'{-ed,-enable-diagnostics}'[Enable diagnostics]' \
+    '(-pls -page-load-strategy)'{-pls,-page-load-strategy}'[Page load strategy (default: heuristic)]:select strategy:(heuristic load domcontentloaded networkidle none)' \
+    '(-dwt -dom-wait-time)'{-dwt,-dom-wait-time}'[Time in seconds to wait after page load when using domcontentloaded strategy (default: 5)]:enter seconds:()' \
+    '(-csp -captcha-solver-provider)'{-csp,-captcha-solver-provider}'[Captcha solver provider]:select provider:(capsolver)' \
+    '(-csk -captcha-solver-key)'{-csk,-captcha-solver-key}'[Captcha solver provider api key]:enter api key:()' \
+    '(-al -auto-login)'{-al,-auto-login}'[Automatic login with username\:password (headless only)]:enter username\:password:()' \
+    '(-rf -recorded-flow)'{-rf,-recorded-flow}'[Chrome DevTools Recorder JSON (or explicit steps) to replay before crawl (headless only)]:select file:_files -g "*.json(-.)"' \
+    '*'{-cs,-crawl-scope}'[In scope url regex to be followed by crawler]:enter regex or file:_files' \
+    '*'{-cos,-crawl-out-scope}'[Out of scope url regex to be excluded by crawler]:enter regex or file:_files' \
+    '(-fs -field-scope)'{-fs,-field-scope}'[Pre-defined scope field or custom regex (default: rdn)]:scope field or regex:(dn rdn fqdn)' \
+    '(-ns -no-scope)'{-ns,-no-scope}'[Disables host based default scope]' \
+    '(-do -display-out-scope)'{-do,-display-out-scope}'[Display external endpoint from scoped crawling]' \
+    '*'{-mr,-match-regex}'[Regex or list of regex to match on output url (cli, file)]:enter regex or file:_files' \
+    '*'{-fr,-filter-regex}'[Regex or list of regex to filter on output url (cli, file)]:enter regex or file:_files' \
+    '(-f -field)'{-f,-field}'[Field to display in output (deprecated, use -output-template)]:select field:($fields)' \
+    '(-sf -store-field)'{-sf,-store-field}'[Field to store in per-host output]:select field:($fields)' \
+    '*'{-em,-extension-match}'[Match output for given extension]:extensions:_values -s , extension php html js json txt xml asp aspx jsp none' \
+    '*'{-ef,-extension-filter}'[Filter output for given extension]:extensions:_values -s , extension png jpg jpeg gif svg ico css woff woff2 ttf eot mp4 mp3 pdf' \
+    '(-ndef -no-default-ext-filter)'{-ndef,-no-default-ext-filter}'[Remove default extensions from the filter list]' \
+    '(-mdc -match-condition)'{-mdc,-match-condition}'[Match response with dsl based condition]:enter dsl condition:()' \
+    '(-fdc -filter-condition)'{-fdc,-filter-condition}'[Filter response with dsl based condition]:enter dsl condition:()' \
+    '(-duf -disable-unique-filter)'{-duf,-disable-unique-filter}'[Disable duplicate content filtering]' \
+    '(-pcs -page-content-similar -sdd -similarity-deduplication)'{-pcs,-page-content-similar}'[Enable page content similarity filtering (after exact content dedup)]' \
+    '(-pcs -page-content-similar -sdd -similarity-deduplication)'{-sdd,-similarity-deduplication}'[Alias for -pcs (page content similarity)]' \
+    '(-pcsm -page-content-similar-mode)'{-pcsm,-page-content-similar-mode}'[Similarity mode (default: simhash)]:select mode:(simhash tfidf bm25)' \
+    '(-pcsd -page-content-similar-distance)'{-pcsd,-page-content-similar-distance}'[Simhash max hamming distance (default: 3)]:enter distance:()' \
+    '(-pcst -page-content-similar-threshold)'{-pcst,-page-content-similar-threshold}'[tfidf/bm25 min score 0-1 (default: 0.85)]:enter score:()' \
+    '(-pcsn -page-content-similar-budget)'{-pcsn,-page-content-similar-budget}'[Pages to fully process per similarity cluster (default: 1)]:enter pages:()' \
+    '*'{-fpt,-filter-page-type}'[Filter response with page type]:page types:_values -s , "page type" error captcha parked' \
+    '(-c -concurrency)'{-c,-concurrency}'[Number of concurrent fetchers to use (default: 10)]:enter concurrency:()' \
+    '(-p -parallelism)'{-p,-parallelism}'[Number of concurrent inputs to process (default: 10)]:enter parallelism:()' \
+    '(-rd -delay)'{-rd,-delay}'[Request delay between each request in seconds]:enter seconds:()' \
+    '(-rl -rate-limit)'{-rl,-rate-limit}'[Maximum requests to send per second (default: 150)]:enter requests:()' \
+    '(-rlm -rate-limit-minute)'{-rlm,-rate-limit-minute}'[Maximum number of requests to send per minute]:enter requests:()' \
+    '(-hrl -host-rate-limit)'{-hrl,-host-rate-limit}'[Maximum requests to send per second per host]:enter requests:()' \
+    '(-hrlm -host-rate-limit-minute)'{-hrlm,-host-rate-limit-minute}'[Maximum number of requests to send per minute per host]:enter requests:()' \
+    '(- *)'{-up,-update}'[Update katana to latest version]' \
+    '(-duc -disable-update-check)'{-duc,-disable-update-check}'[Disable automatic katana update check]' \
+    '(-o -output)'{-o,-output}'[File to write output to]:select file:_files -X "Select output file or enter filename manually"' \
+    '(-ot -output-template)'{-ot,-output-template}'[Custom output template]:enter template (e.g. {{url}}):()' \
+    '(-sr -store-response)'{-sr,-store-response}'[Store http requests/responses]' \
+    '(-srd -store-response-dir)'{-srd,-store-response-dir}'[Store http requests/responses to custom directory]:select dir:_files -/' \
+    '(-ncb -no-clobber)'{-ncb,-no-clobber}'[Do not overwrite output file]' \
+    '(-sfd -store-field-dir)'{-sfd,-store-field-dir}'[Store per-host field to custom directory]:select dir:_files -/' \
+    '(-or -omit-raw)'{-or,-omit-raw}'[Omit raw requests/responses from jsonl output]' \
+    '(-ob -omit-body)'{-ob,-omit-body}'[Omit response body from jsonl output]' \
+    '(- *)'{-lof,-list-output-fields}'[List of fields to output in jsonl format]' \
+    '*'{-eof,-exclude-output-fields}'[Exclude fields from jsonl output]:fields:_values -s , field $output_fields' \
+    '(-j -jsonl)'{-j,-jsonl}'[Write output in jsonl format]' \
+    '(-nc -no-color)'{-nc,-no-color}'[Disable output content coloring (ANSI escape codes)]' \
+    '-silent[Display output only]' \
+    '(-v -verbose)'{-v,-verbose}'[Display verbose output]' \
+    '-debug[Display debug output]' \
+    '(- *)-version[Display project version]' \
+    '(- *)'{-h,-help}'[Show help]'
