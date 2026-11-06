@@ -1,0 +1,23 @@
+#compdef evil-winrm-py ewp
+
+_arguments \
+	'(- *)'{-h,--help}'[Show help message and exit]' \
+	'(- *)--version[Show version]' \
+	'(-i --ip)'{-i,--ip}'[Remote host IP or hostname]:select host:_hosts' \
+	'(-u --user)'{-u,--user}'[Username]:()' \
+	'(-p --password)'{-p,--password}'[Password]:()' \
+	'(-H --hash)'{-H,--hash}'[NTHash]:()' \
+	'(-c --configuration-name)'{-c,--configuration-name}'[Session configuration (JEA endpoint) to connect to (default: Microsoft.PowerShell)]:()' \
+	'--priv-key-pem[Local path to private key PEM file]:select file:_files -g "*.(pem|key)(-.)"' \
+	'--cert-pem[Local path to certificate PEM file]:select file:_files -g "*.(pem|crt)(-.)"' \
+	'--uri[WSMan URI (default: /wsman)]:()' \
+	'--ua[User agent for the WinRM client (default: Microsoft WinRM Client)]:()' \
+	'--port[Remote host port (default: 5985)]:()' \
+	'--spn-prefix[Specify SPN prefix]:()' \
+	'--spn-hostname[Specify SPN hostname]:select host:_hosts' \
+	'(-k --kerberos)'{-k,--kerberos}'[Use Kerberos authentication]' \
+	'--no-pass[Do not prompt for password]' \
+	'--ssl[Use SSL]' \
+	'--log[Log session to file]' \
+	'--debug[Enable debug logging]' \
+	'--no-colors[Disable colors]'

@@ -1,0 +1,200 @@
+#compdef bloodyAD bloodyad
+
+# Subcommands and their options are read from bloodyAD's argparse help at
+# completion time (cached per shell), so the list follows the installed version.
+
+_bloodyad_help() {
+    # Wide COLUMNS keeps every help entry on one line; leaf help is printed on stderr
+    _call_program help PYTHONWARNINGS=ignore COLUMNS=1000 $service "$@" --help 2>&1
+}
+
+# name:description pairs for the commands of a category
+_bloodyad_commands() {
+    local cat=$1 var=_bloodyad_cmds_$1 line pending
+    local -a cmds
+    if (( ${(P)+var} )); then
+        cmds=("${(@P)var}")
+    else
+        for line in ${(f)"$(_bloodyad_help $cat)"}; do
+            if [[ -n $pending ]]; then
+                cmds+=("$pending:${line##[[:space:]]##}")
+                pending=
+            elif [[ $line =~ '^    ([^ ]+)( +(.*))?$' ]]; then
+                if [[ -n $match[3] ]]; then
+                    cmds+=("$match[1]:$match[3]")
+                else
+                    pending=$match[1]
+                fi
+            fi
+        done
+        (( $#cmds )) && typeset -ga $var && set -A $var "${cmds[@]}"
+    fi
+    _describe -t commands "$cat command" cmds
+}
+
+# Turn a metavar into an _arguments action: choices, files or free text
+_bloodyad_action() {
+    local name=$1 metavar=${${1//[\[\]]/}%% *}
+    if [[ $metavar == \{*\} ]]; then
+        REPLY="(${${metavar[2,-2]}//,/ })"
+    elif [[ ${(U)name} == *(PATH|FILE|DIR|OUTPUT)* ]]; then
+        REPLY=_files
+    else
+        REPLY=
+    fi
+}
+
+# _arguments specs for `bloodyAD <category> <command>`, returned in $reply
+_bloodyad_specs() {
+    local var=_bloodyad_specs_${1}_${2//[^[:alnum:]_]/_}
+    local section line inv desc pending names metavar argsep
+    local -a specs forms optnames
+    local -i npos=0
+    if (( ${(P)+var} )); then
+        reply=("${(@P)var}")
+        return
+    fi
+    for line in ${(f)"$(_bloodyad_help $1 $2)"}; do
+        case $line in
+            'positional arguments:') section=pos; continue ;;
+            'options:') section=opt; continue ;;
+            [^[:space:]]*) section=; continue ;;
+        esac
+        # Description pushed to its own line when the invocation is long
+        if [[ -n $pending ]]; then
+            desc=${line##[[:space:]]##}
+            line="  $pending  $desc"
+            pending=
+        fi
+        case $section in
+            pos)
+                [[ $line =~ '^  ([^ -][^ ]*)( {2,}(.*))?$' ]] || continue
+                if [[ -z $match[2] ]]; then
+                    pending=$match[1]
+                    continue
+                fi
+                _bloodyad_action $match[1]
+                specs+=("$(( ++npos )):${match[1]//:/\\:} - ${match[3]//:/\\:}:$REPLY")
+                ;;
+            opt)
+                [[ $line =~ '^  (-([^ ]| [^ ])*)( {2,}(.*))?$' ]] || continue
+                inv=$match[1] desc=$match[4]
+                if [[ -z $match[3] ]]; then
+                    pending=$inv
+                    continue
+                fi
+                forms=("${(@s:, :)inv}")
+                optnames=(${forms%% *})
+                metavar=${forms[-1]#* }
+                [[ $metavar == $forms[-1] ]] && metavar=
+                desc=${${${desc//\\/\\\\}//\[/\\[}//\]/\\]}
+                if [[ $optnames == (-h|--help)* ]]; then
+                    for names in $optnames; do
+                        specs+=("(- *)${names}[$desc]")
+                    done
+                    continue
+                fi
+                if [[ -n $metavar ]]; then
+                    _bloodyad_action $metavar
+                    # [METAVAR] means the value is optional
+                    [[ $metavar == \[* ]] && argsep='::' || argsep=':'
+                    metavar=${${${metavar//[\[\]]/}%% *}//:/\\:}
+                    for names in $optnames; do
+                        specs+=("($optnames)${names}[$desc]$argsep$metavar:$REPLY")
+                    done
+                else
+                    for names in $optnames; do
+                        specs+=("($optnames)${names}[$desc]")
+                    done
+                fi
+                ;;
+        esac
+    done
+    typeset -ga $var
+    set -A $var "${specs[@]}"
+    reply=($specs)
+}
+
+# -k accepts keywords such as kdc=IP or ccache=FILE
+_bloodyad_krb_keywords() {
+    if compset -P '(ccache|kirbi|keytab)='; then
+        _files
+    elif compset -P '(kdc|kdcc)='; then
+        _hosts
+    elif compset -P 'realmc='; then
+        _message 'enter realm'
+    else
+        local -a keywords
+        keywords=(
+            'kdc:Kerberos server for the provided keyfile'
+            'kdcc:Kerberos server of the --host realm (cross realm)'
+            'realmc:Realm of the --host provided (cross realm)'
+            'ccache:Use a ccache keyfile'
+            'kirbi:Use a kirbi keyfile'
+            'keytab:Use a keytab keyfile'
+        )
+        _describe -t keywords 'kerberos keyword' keywords -qS =
+    fi
+}
+
+setopt localoptions extendedglob
+
+local -a global_opts
+global_opts=(
+    '(- *)'{-h,--help}'[Show help message and exit]'
+    '(-d --domain)'{-d+,--domain=}'[Domain used for NTLM authentication]:enter domain:()'
+    '(-u --username)'{-u+,--username=}'[Username used for NTLM authentication]:enter username:()'
+    '(-p --password)'{-p+,--password=}'[Password, LMHASH\:NTHASH, AES/RC4 key or certificate password]:enter password:()'
+    '(-k --kerberos)'{-k,--kerberos}'[Enable Kerberos authentication, optionally with keywords like kdc= or ccache=]::kerberos keyword:_bloodyad_krb_keywords'
+    '(-f --format)'{-f+,--format=}'[Format for --password or -k keyfile]:select format:(b64 hex aes rc4 default)'
+    '(-c --certificate)'{-c,--certificate}'[Certificate authentication as path/to/key\:path/to/cert]::select file:_files'
+    '*'{-s,--secure}'[Use LDAP/GC over TLS (-ss simple bind, -sss no channel binding/signing)]'
+    '(-H --host)'{-H+,--host=}'[Hostname or IP of the DC]:select host:_hosts'
+    '(-i --dc-ip)'{-i+,--dc-ip=}'[IP of the DC (if --host can not resolve)]:select host:_hosts'
+    '--dns=[IP of the DNS to resolve AD names]:select host:_hosts'
+    '(-t --timeout)'{-t+,--timeout=}'[Connection timeout in seconds]:enter seconds:()'
+    '--gc[Connect to Global Catalog (GC)]'
+    '(-v --verbose)'{-v+,--verbose=}'[Adjust output verbosity]:select level:(QUIET INFO DEBUG TRACE)'
+    '--json[Output results in JSON format]'
+)
+
+local curcontext="$curcontext" state line category
+typeset -A opt_args
+
+_arguments -C \
+    $global_opts \
+    '1: :->category' \
+    '*:: :->args'
+
+case $state in
+    category)
+        local -a categories
+        categories=(
+            'add:[ADD] function category'
+            'get:[GET] function category'
+            'msldap:[MSLDAP] function category'
+            'remove:[REMOVE] function category'
+            'set:[SET] function category'
+        )
+        _describe -t categories 'bloodyAD category' categories
+        ;;
+    args)
+        category=$line[1]
+        curcontext="${curcontext%:*}-$category:"
+        _arguments -C \
+            '(- *)'{-h,--help}'[Show help message and exit]' \
+            '1: :->command' \
+            '*:: :->command_args'
+        case $state in
+            command)
+                _bloodyad_commands $category
+                ;;
+            command_args)
+                curcontext="${curcontext%:*}-$line[1]:"
+                local -a reply
+                _bloodyad_specs $category $line[1]
+                (( $#reply )) && _arguments $reply
+                ;;
+        esac
+        ;;
+esac

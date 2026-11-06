@@ -1,0 +1,503 @@
+#compdef nxc netexec
+
+# NetExec (nxc) completion
+# https://github.com/Pennyw0rth/NetExec
+
+# Persistent cache for module names and module options.  The files live in
+# ${XDG_CACHE_HOME:-$HOME/.cache}/zsh-completions/nxc and are invalidated when
+# the NetExec binary or the user module directory changes.
+_nxc_cache_dir() {
+	local dir=${XDG_CACHE_HOME:-$HOME/.cache}/zsh-completions/nxc
+	if [[ ! -d $dir ]]; then
+		mkdir -p -m 700 -- "$dir" 2>/dev/null || return 1
+	fi
+	REPLY=$dir
+}
+
+_nxc_cache_file() {
+	local dir
+	_nxc_cache_dir || return 1
+	dir=$REPLY
+	REPLY="$dir/$1"
+}
+
+_nxc_cache_valid() {
+	local file=$1 bin=${commands[nxc]:-${commands[$service]}}
+	local modules_dir
+	local -a old
+
+	[[ -r $file ]] || return 1
+	[[ -n $bin && $bin -nt $file ]] && return 1
+	for modules_dir in ${NXC_PATH:-$HOME/.nxc}/modules; do
+		[[ -d $modules_dir && $modules_dir -nt $file ]] && return 1
+	done
+	# Refresh weekly in case modules were changed without touching the binary.
+	old=($file(Nmh+168))
+	(( $#old )) && return 1
+	return 0
+}
+
+_nxc_cache_read() {
+	local file=$1
+	[[ -r $file ]] || return 1
+	reply=("${(@f)$(<$file)}")
+	(( $#reply > 0 ))
+}
+
+_nxc_cache_write() {
+	local file=$1 dir tmp
+	shift
+	dir=${file:h}
+	[[ -d $dir ]] || mkdir -p -m 700 -- "$dir" 2>/dev/null || return 1
+	tmp="$file.tmp.$$"
+	print -rl -- "$@" >| "$tmp" && mv -f -- "$tmp" "$file"
+}
+
+# Modules are loaded from the installed NetExec version at completion time so
+# the list follows the installed version (including user modules).
+_nxc_modules() {
+	local protocol=$_nxc_protocol
+	local var=_nxc_modules_${protocol//[^[:alnum:]_]/_}
+	local -a modules
+	local line file=
+
+	if (( ${(P)+var} )); then
+		modules=("${(@P)var}")
+	else
+		_nxc_cache_file "modules-$protocol" && file=$REPLY
+		if [[ -n $file ]] && _nxc_cache_valid $file && _nxc_cache_read $file; then
+			modules=("${(@)reply}")
+		else
+			for line in ${(f)"$(_call_program nxc-modules $service $protocol -L 2>/dev/null)"}; do
+				if [[ $line =~ '^\[\*\] ([^ ]+) +(.*)$' ]]; then
+					modules+=("$match[1]:$match[2]")
+				fi
+			done
+			(( $#modules && $#file )) && _nxc_cache_write $file "${modules[@]}"
+		fi
+		(( $#modules )) && typeset -ga $var && set -A $var "${modules[@]}"
+	fi
+
+	_describe -t modules 'module' modules
+}
+
+# Module options can be passed as KEY=VALUE with -o.  Ask NetExec for the
+# options supported by the selected module.
+_nxc_module_options() {
+	local module line
+	local -i i
+	local -a opts
+
+	for (( i = 1; i < $#words; i++ )); do
+		case $words[i] in
+			-M|--module)
+				module=$words[i+1]
+				break
+				;;
+			--module=*)
+				module=${words[i]#--module=}
+				break
+				;;
+		esac
+	done
+	[[ -n $module ]] || return 1
+
+	local var=_nxc_module_opts_${module//[^[:alnum:]_]/_}
+	local file=
+	if (( ${(P)+var} )); then
+		opts=("${(@P)var}")
+	else
+		_nxc_cache_file "module-options-${_nxc_protocol}-${module//[^[:alnum:]_]/_}" && file=$REPLY
+		if [[ -n $file ]] && _nxc_cache_valid $file && _nxc_cache_read $file; then
+			opts=("${(@)reply}")
+		else
+			for line in ${(f)"$(_call_program nxc-module-options $service ${(q)_nxc_protocol} -M ${(q)module} --options 2>/dev/null)"}; do
+				if [[ $line =~ '^([A-Z][A-Z0-9_]*)[[:space:]]{2,}(.*)$' ]]; then
+					opts+=("$match[1]=:${${match[2]}//:/\\:}")
+				fi
+			done
+			(( $#opts && $#file )) && _nxc_cache_write $file "${opts[@]}"
+		fi
+		(( $#opts )) && typeset -ga $var && set -A $var "${opts[@]}"
+	fi
+
+	[[ $#opts -gt 0 ]] && _describe -t module-options 'module option' opts
+}
+
+_nxc_protocols() {
+	local -a protocols
+	protocols=(
+		'smb:own stuff using SMB'
+		'ssh:own stuff using SSH'
+		'ldap:own stuff using LDAP'
+		'winrm:own stuff using WINRM'
+		'mssql:own stuff using MSSQL'
+		'rdp:own stuff using RDP'
+		'wmi:own stuff using WMI'
+		'nfs:own stuff using NFS'
+		'ftp:own stuff using FTP'
+		'vnc:own stuff using VNC'
+	)
+	_describe -t protocols 'protocol' protocols
+}
+
+_nxc_module_categories() {
+	local -a categories
+	categories=(
+		'enumeration:enumeration modules'
+		'credential dumping:credential dumping modules'
+		'privilege escalation:privilege escalation modules'
+	)
+	_describe -t categories 'module category' categories
+}
+
+_nxc_targets() {
+	_alternative \
+		'hosts:host:_hosts' \
+		'files:target file:_files'
+}
+
+_nxc_common_opts() {
+	reply=(
+		'(- *)'{-h,--help}'[Show help message and exit]'
+		'(- *)--version[Display nxc version]'
+		'(-t --threads)'{-t,--threads}'[set how many concurrent threads to use]:threads:()'
+		'--timeout[max timeout in seconds of each thread]:seconds:()'
+		'--jitter[sets a random delay between each authentication]:interval:()'
+		'--no-progress[do not display progress bar during scan]'
+		'--log[export result into a custom file]:log file:_files'
+		'(--debug)--verbose[enable verbose output]'
+		'(--verbose)--debug[enable debug level information]'
+		'-6[Enable force IPv6]'
+		'--dns-server[Specify DNS server]:DNS server:_hosts'
+		'--dns-tcp[Use TCP instead of UDP for DNS queries]'
+		'--dns-timeout[DNS query timeout in seconds]:seconds:()'
+		'*'{-u,--username}'[username(s) or file(s) containing usernames]:username:_users'
+		'*'{-p,--password}'[password(s) or file(s) containing passwords]:password:()'
+		'*-id[database credential ID(s) to use for authentication]:credential id:()'
+		'--ignore-pw-decoding[Ignore non UTF-8 characters when decoding the password file]'
+		'--no-bruteforce[No spray when using file for username and password]'
+		'--continue-on-success[continues authentication attempts even after successes]'
+		'--gfail-limit[max number of global failed login attempts]:limit:()'
+		'--ufail-limit[max number of failed login attempts per username]:limit:()'
+		'--fail-limit[max number of failed login attempts per host]:limit:()'
+		'(-k --kerberos)'{-k,--kerberos}'[Use Kerberos authentication]'
+		'--use-kcache[Use Kerberos authentication from ccache file (KRB5CCNAME)]'
+		'*--aesKey[AES key to use for Kerberos Authentication]:AES key:()'
+		'--kdcHost[FQDN of the domain controller]:fqdn:_hosts'
+		'--pfx-cert[Use certificate authentication from pfx file]:pfx file:_files -g "*.pfx"'
+		'--pfx-base64[Use certificate authentication from pfx file encoded in base64]:base64:()'
+		'--pfx-pass[Password of the pfx certificate]:password:()'
+		'--pem-cert[Use certificate authentication from PEM file]:PEM file:_files -g "*.pem"'
+		'--pem-key[Private key for the PEM format]:key file:_files'
+		'*'{-M,--module}'[module to use]:module:_nxc_modules'
+		'*-o[module options]:module option:_nxc_module_options'
+		'(-L --list-modules)'{-L,--list-modules}'[list available modules]::category:_nxc_module_categories'
+		'--options[display module options]'
+	)
+}
+
+_nxc_smb_opts() {
+	reply=(
+		'*'{-H,--hash}'[NTLM hash(es) or file(s) containing NTLM hashes]:hash:()'
+		'--delegate[Impersonate user with S4U2Self + S4U2Proxy]:user:()'
+		'--delegate-spn[SPN to use for S4U2Proxy]:spn:()'
+		'--generate-st[Store the S4U Service Ticket in the specified file]:file:_files'
+		'--self[Only do S4U2Self, no S4U2Proxy]'
+		'(-d --domain)--local-auth[authenticate locally to each target]'
+		'(--local-auth)'{-d,--domain}'[domain to authenticate to]:domain:()'
+		'--port[SMB port]:port:()'
+		'--share[specify a share]:share:()'
+		'--smb-server-port[specify a server port for SMB]:port:()'
+		'--no-smbv1[Force to disable SMBv1 in connection]'
+		'--no-admin-check[Avoid checking admin which queries the Service Control Manager]'
+		"--gen-relay-list[output all hosts that don't require SMB signing]:file:_files"
+		'--smb-timeout[SMB connection timeout]:seconds:()'
+		'--laps[LAPS authentication]::user:()'
+		'--generate-hosts-file[Generate a hosts file from a range of IPs]:file:_files'
+		'--generate-krb5-file[Generate a krb5 file from a range of IPs]:file:_files'
+		'--generate-tgt[Generate a tgt ticket]:file:_files'
+		'--sam[dump SAM hashes from target systems]::method:(regdump secdump)'
+		'--lsa[dump LSA secrets from target systems]::method:(regdump secdump)'
+		'--ntds[dump the NTDS.dit from target DCs]:method:(drsuapi vss)'
+		'--kerberos-keys[Also dump Kerberos AES and DES keys from target DC]'
+		'(--enabled)--history[Also retrieve password history from target DC]'
+		'(--history)--enabled[Only dump enabled targets from DC]'
+		'--user[Dump selected user from DC]:username:()'
+		'--dpapi[dump DPAPI secrets from target systems]:: :((cookies nosystem))'
+		'--sccm[dump SCCM secrets from target systems]::method:(wmi disk)'
+		'--mkfile[File with masterkeys]:file:_files'
+		'--pvk[File with domain backupkey]:file:_files'
+		'--list-snapshots[Lists the VSS snapshots]::share:()'
+		'--shares[Enumerate shares and access]::filter:(read write read,write)'
+		'*--exclude-shares[List of shares to exclude from enumeration]:share:()'
+		'--dir[List the content of a path]::path:()'
+		'--interfaces[Enumerate network interfaces]'
+		'--no-write-check[Skip write check on shares]'
+		'*--filter-shares[Filter shares by access]:filter:(READ WRITE READ,WRITE)'
+		'--disks[Enumerate disks]'
+		'*--users[Enumerate domain users]::user:()'
+		'--users-export[Enumerate domain users and export them to a file]:file:_files'
+		'--groups[Enumerate domain groups]::group:()'
+		'--local-groups[Enumerate local groups]::group:()'
+		'--computers[Enumerate computer users]::computer:()'
+		'--pass-pol[dump password policy]'
+		'--rid-brute[Enumerate users by bruteforcing RIDs]::max RID:()'
+		'--smb-sessions[Enumerate active SMB sessions]'
+		'--reg-sessions[Enumerate user sessions using the Remote Registry]::user:()'
+		'--loggedon-users[Enumerate logged on users]::user:()'
+		'--loggedon-users-filter[only search for specific user]:regex:()'
+		'--qwinsta[Enumerate user sessions]::user:()'
+		'--tasklist[Enumerate running processes]:process:()'
+		'--taskkill[Kills a specific PID or process name]:pid:()'
+		'--wmi-query[Issues the specified WMI query]:query:()'
+		'--wmi-namespace[WMI Namespace]:namespace:()'
+		'--spider[share to spider]:share:()'
+		'--spider-folder[folder to spider]:folder:()'
+		'--content[enable file content searching]'
+		'--exclude-dirs[directories to exclude from spidering]:directories:()'
+		'--depth[max spider recursion depth]:depth:()'
+		'--only-files[only spider files]'
+		'--silent[Do not print found files or directories]'
+		'(--regex)*--pattern[pattern(s) to search for]:pattern:()'
+		'(--pattern)*--regex[regex(es) to search for]:regex:()'
+		'*--put-file[Put a local file into remote target]:local file:_files:remote file:()'
+		'*--get-file[Get a remote file]:remote file:():local file:_files'
+		'--append-host[append the host to the get-file filename]'
+		'--exec-method[method to execute the command]:method:(wmiexec mmcexec smbexec atexec)'
+		'--dcom-timeout[DCOM connection timeout]:seconds:()'
+		'--get-output-tries[Number of times atexec/smbexec/mmcexec tries to get results]:tries:()'
+		"--codec[Set encoding used (codec) from the target's output]:codec:()"
+		'--no-output[do not retrieve command output]'
+		'(-X)-x[execute the specified CMD command]:command:()'
+		'(-x)-X[execute the specified PowerShell command]:command:()'
+		'--obfs[Obfuscate PowerShell scripts]'
+		'--amsi-bypass[File with a custom AMSI bypass]:file:_files'
+		'--clear-obfscripts[Clear all cached obfuscated PowerShell scripts]'
+		'--force-ps32[force PowerShell commands to run in a 32-bit process]'
+		'--no-encode[Do not encode the PowerShell command ran on target]'
+	)
+}
+
+_nxc_ssh_opts() {
+	reply=(
+		'--key-file[Authenticate using the specified private key]:key file:_files'
+		'--port[SSH port]:port:()'
+		'--ssh-timeout[SSH connection timeout]:seconds:()'
+		'--sudo-check[Check user privilege with sudo]'
+		'--sudo-check-method[method to use with sudo check]:method:(sudo-stdin mkfifo)'
+		'--get-output-tries[Number of times with sudo command tries to get results]:tries:()'
+		'*--put-file[Put a local file into remote target]:local file:_files:remote file:()'
+		'*--get-file[Get a remote file]:remote file:():local file:_files'
+		"--codec[Set encoding used (codec) from the target's output]:codec:()"
+		'--no-output[do not retrieve command output]'
+		'-x[execute the specified command]:command:()'
+	)
+}
+
+_nxc_ldap_opts() {
+	reply=(
+		'*'{-H,--hash}'[NTLM hash(es) or file(s) containing NTLM hashes]:hash:()'
+		'--simple-bind[Use simple bind authentication]'
+		'--port[LDAP port]:port:()'
+		'-d[domain to authenticate to]:domain:()'
+		'--asreproast[Output AS_REP response to crack with hashcat to file]:file:_files'
+		'--kerberoasting[Output TGS ticket to crack with hashcat to file]:file:_files'
+		'--kerberoast[Output TGS ticket to crack with hashcat to file]:file:_files'
+		'*--kerberoast-account[Target specific accounts for kerberoasting]:account:()'
+		'--no-preauth-targets[Targeted kerberoastable users]:file:_files'
+		'--base-dn[base DN for search queries]:base DN:()'
+		'--query[Query LDAP with a custom filter and attributes]:filter:():attributes:()'
+		'--find-delegation[Finds delegation relationships within an AD domain]'
+		'--trusted-for-delegation[Get users and computers with TRUSTED_FOR_DELEGATION]'
+		'--password-not-required[Get users with flag PASSWD_NOTREQD]'
+		'--admin-count[Get users with adminCount=1]'
+		'*--users[Enumerate domain users]::user:()'
+		'--users-export[Enumerate domain users and export them to a file]:file:_files'
+		'--groups[Enumerate domain groups]::group:()'
+		'--computers[Enumerate domain computers]'
+		'--dc-list[Enumerate Domain Controllers]'
+		'--get-sid[Get domain sid]'
+		'*--active-users[Get Active Domain Users Accounts]::user:()'
+		'--pso[Get Fine Grained Password Policy or PSOs]'
+		'--pass-pol[Dump password policy]'
+		'--gmsa[Enumerate GMSA passwords]'
+		'--gmsa-convert-id[Get the secret name of a specific gmsa]:gmsa:()'
+		'--gmsa-decrypt-lsa[Decrypt the gmsa encrypted value from LSA]:value:()'
+		'--bloodhound[Perform a Bloodhound scan]'
+		'(-c --collection)'{-c,--collection}'[Which information to collect]:collection:(Group LocalAdmin Session Trusts Default DCOnly DCOM RDP PSRemote LoggedOn Container ObjectProps ACL All)'
+	)
+}
+
+_nxc_winrm_opts() {
+	reply=(
+		'*'{-H,--hash}'[NTLM hash(es) or file(s) containing NTLM hashes]:hash:()'
+		'*--port[WinRM port or ports]:port:()'
+		'*--check-proto[Protocols to check]:protocol:(http https)'
+		'--laps[LAPS authentication]::user:()'
+		'--http-timeout[HTTP timeout for WinRM connections]:seconds:()'
+		'(-d --domain)--local-auth[authenticate locally to each target]'
+		'(--local-auth)-d[domain to authenticate to]:domain:()'
+		'--dump-method[Select shell type in hash dumps]:method:(cmd powershell)'
+		'--sam[dump SAM hashes from target systems]'
+		'--lsa[dump LSA secrets from target systems]'
+		'--dpapi[dump user Credential Manager secrets from target systems]'
+		"--codec[Set encoding used (codec) from the target's output]:codec:()"
+		'--no-output[do not retrieve command output]'
+		'-x[execute the specified CMD command]:command:()'
+		'-X[execute the specified PowerShell command]:command:()'
+	)
+}
+
+_nxc_mssql_opts() {
+	reply=(
+		'*'{-H,--hash}'[NTLM hash(es) or file(s) containing NTLM hashes]:hash:()'
+		'--port[MSSQL port]:port:()'
+		'--mssql-timeout[SQL server connection timeout]:seconds:()'
+		'(-q --query)'{-q,--query}'[execute the specified query against the mssql db]:query:()'
+		'--database[list databases or list tables for NAME]::name:()'
+		'(-d --domain)--local-auth[authenticate locally to each target]'
+		'(--local-auth)-d[domain name]:domain:()'
+		'--sam[dump SAM hashes from target systems]'
+		'--lsa[dump LSA secrets from target systems]'
+		'--no-output[do not retrieve command output]'
+		'(-X)-x[execute the specified CMD command]:command:()'
+		'(-x)-X[execute the specified PowerShell command]:command:()'
+		'--force-ps32[Force the PowerShell command to run in a 32-bit process]'
+		'--obfs[Obfuscate PowerShell ran on target]'
+		'--amsi-bypass[File with a custom AMSI bypass]:file:_files'
+		'--clear-obfscripts[Clear all cached obfuscated PowerShell scripts]'
+		'--no-encode[Do not encode the PowerShell command ran on target]'
+		'*--put-file[Put a local file into remote target]:local file:_files:remote file:()'
+		'*--get-file[Get a remote file]:remote file:():local file:_files'
+		'--rid-brute[enumerate users by bruteforcing RIDs]::max RID:()'
+	)
+}
+
+_nxc_rdp_opts() {
+	reply=(
+		'*'{-H,--hash}'[NTLM hash(es) or file(s) containing NTLM hashes]:hash:()'
+		'--port[RDP port]:port:()'
+		'--rdp-timeout[RDP timeout on socket connection]:seconds:()'
+		'--nla-screenshot[Screenshot RDP login prompt if NLA is disabled]'
+		'(-d --domain)--local-auth[authenticate locally to each target]'
+		'(--local-auth)-d[domain to authenticate to]:domain:()'
+		'--screenshot[Screenshot RDP if connection success]'
+		'--screentime[Time to wait for desktop image]:seconds:()'
+		'--res[Resolution in WIDTHxHEIGHT format]:resolution:()'
+		'-x[execute the specified CMD command]:command:()'
+		'-X[execute the specified PowerShell command]:command:()'
+		'--cmd-delay[Sleep time before executing command]:seconds:()'
+		'--clipboard-delay[Maximum time to wait for clipboard initialization]:seconds:()'
+		'--no-output[do not retrieve command output]'
+	)
+}
+
+_nxc_wmi_opts() {
+	reply=(
+		'*'{-H,--hash}'[NTLM hash(es) or file(s) containing NTLM hashes]:hash:()'
+		'--port[WMI port]:port:(135)'
+		'--rpc-timeout[RPC/DCOM connection timeout]:seconds:()'
+		'(-d --domain)--local-auth[Authenticate locally to each target]'
+		'(--local-auth)-d[Domain to authenticate to]:domain:()'
+		'--list-snapshots[Lists the VSS snapshots]::share:()'
+		'--wmi-query[Issues the specified WMI query]:query:()'
+		'--wmi-namespace[WMI Namespace]:namespace:()'
+		'--no-output[do not retrieve command output]'
+		'-x[Creates a new cmd process and executes the specified command]:command:()'
+		'-X[Creates a new PowerShell process and executes the specified command]:command:()'
+		'--exec-method[method to execute the command]:method:(wmiexec wmiexec-event)'
+		'--exec-timeout[timeout when executing a command]:seconds:()'
+		"--codec[Set encoding used (codec) from the target's output]:codec:()"
+	)
+}
+
+_nxc_nfs_opts() {
+	reply=(
+		'--port[NFS portmapper port]:port:()'
+		'--nfs-timeout[NFS connection timeout]:seconds:()'
+		'--share[Specify a share]:share:()'
+		'--shares[List NFS shares]'
+		'--enum-shares[Enumerate exposed shares recursively]::depth:()'
+		'--ls[List files in the specified NFS share]::path:()'
+		'*--get-file[Download remote NFS file]:remote file:():local file:_files'
+		'*--put-file[Upload a local file to remote NFS]:local file:_files:remote file:()'
+	)
+}
+
+_nxc_ftp_opts() {
+	reply=(
+		'--port[FTP port]:port:()'
+		'--ls[List all files in the directory]::directory:()'
+		'--get[Download a file]:file:()'
+		'*--put[Upload a file]:local file:_files:remote file:()'
+	)
+}
+
+_nxc_vnc_opts() {
+	reply=(
+		'--port[VNC port]:port:()'
+		'--vnc-sleep[VNC sleep on socket connection]:seconds:()'
+		'--screenshot[Screenshot VNC if connection success]'
+		'--screentime[Time to wait for desktop image]:seconds:()'
+	)
+}
+
+_nxc() {
+	local curcontext="$curcontext" state line protocol
+	local -a global_opts opts common_opts
+	typeset -A opt_args
+
+	global_opts=(
+		'(- *)'{-h,--help}'[Show help message and exit]'
+		'(- *)--version[Display nxc version]'
+		'(-t --threads)'{-t,--threads}'[set how many concurrent threads to use]:threads:()'
+		'--timeout[max timeout in seconds of each thread]:seconds:()'
+		'--jitter[sets a random delay between each authentication]:interval:()'
+		'--no-progress[do not display progress bar during scan]'
+		'--log[export result into a custom file]:log file:_files'
+		'(--debug)--verbose[enable verbose output]'
+		'(--verbose)--debug[enable debug level information]'
+		'-6[Enable force IPv6]'
+		'--dns-server[Specify DNS server]:DNS server:_hosts'
+		'--dns-tcp[Use TCP instead of UDP for DNS queries]'
+		'--dns-timeout[DNS query timeout in seconds]:seconds:()'
+	)
+
+	_arguments -C \
+		$global_opts \
+		'1:protocol:->protocol' \
+		'*::arguments:->args'
+
+	case $state in
+		protocol)
+			_nxc_protocols
+			;;
+		args)
+			protocol=$line[1]
+			case $protocol in
+				smb) _nxc_smb_opts ;;
+				ssh) _nxc_ssh_opts ;;
+				ldap) _nxc_ldap_opts ;;
+				winrm) _nxc_winrm_opts ;;
+				mssql) _nxc_mssql_opts ;;
+				rdp) _nxc_rdp_opts ;;
+				wmi) _nxc_wmi_opts ;;
+				nfs) _nxc_nfs_opts ;;
+				ftp) _nxc_ftp_opts ;;
+				vnc) _nxc_vnc_opts ;;
+				*) return 1 ;;
+			esac
+			opts=($reply)
+			_nxc_common_opts
+			common_opts=($reply)
+			local _nxc_protocol=$protocol
+			_arguments \
+				$common_opts \
+				$opts \
+				'*:target:_nxc_targets'
+			;;
+	esac
+}
+
+_nxc "$@"
